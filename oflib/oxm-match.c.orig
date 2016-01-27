@@ -206,8 +206,6 @@ oxm_prereqs_ok(const struct oxm_field *field, const struct ofl_match *rule)
     if (!field->dl_type[0])
         return true;
     else {
-		return true;
-		/* hsh
         HMAP_FOR_EACH_WITH_HASH (omt, struct ofl_match_tlv, hmap_node, hash_int(OXM_OF_ETH_TYPE, 0),
               &rule->match_fields) {
               uint16_t eth_type;
@@ -218,7 +216,6 @@ oxm_prereqs_ok(const struct oxm_field *field, const struct ofl_match *rule)
                 return true;
               }
         }
-		*/
     }
 
     return false;

@@ -5,8 +5,6 @@ bin_PROGRAMS += \
 	utilities/ofp-kill
 bin_SCRIPTS += utilities/ofp-pki
 noinst_SCRIPTS += utilities/ofp-pki-cgi utilities/ofp-parse-leaks
-noinst_PROGRAMS += \
-	utilities/ofp-read
 
 EXTRA_DIST += \
 	utilities/dpctl.8.in \
@@ -45,7 +43,3 @@ utilities_ofp_discover_LDADD = lib/libopenflow.a
 
 utilities_ofp_kill_SOURCES = utilities/ofp-kill.c
 utilities_ofp_kill_LDADD = lib/libopenflow.a
-
-utilities_ofp_read_SOURCES = utilities/ofp-read.c
-utilities_ofp_read_LDADD = lib/libopenflow.a oflib/liboflib.a
-

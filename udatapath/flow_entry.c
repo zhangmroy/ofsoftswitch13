@@ -150,19 +150,6 @@ flow_entry_replace_instructions(struct flow_entry *entry,
     init_group_refs(entry);
 }
 
-void
-flow_entry_modify_stats(struct flow_entry *entry,
-                              struct ofl_msg_flow_mod *mod) {
-
-    /* Reset flow counters as needed. Jean II */
-    if ((mod->flags & OFPFF_RESET_COUNTS) != 0) {
-        if (!(entry->no_pkt_count))
-            entry->stats->packet_count     = 0;
-        if (!(entry->no_byt_count))
-            entry->stats->byte_count       = 0;
-    }
-}
-
 bool
 flow_entry_idle_timeout(struct flow_entry *entry) {
     bool timeout;
@@ -191,7 +178,7 @@ flow_entry_hard_timeout(struct flow_entry *entry) {
 void
 flow_entry_update(struct flow_entry *entry) {
     entry->stats->duration_sec  =  (time_msec() - entry->created) / 1000;
-    entry->stats->duration_nsec = ((time_msec() - entry->created) % 1000) * 1000000;
+    entry->stats->duration_nsec = ((time_msec() - entry->created) % 1000) * 1000;
 }
 
 /* Returns true if the flow entry has a reference to the given group. */
@@ -344,7 +331,6 @@ flow_entry_create(struct datapath *dp, struct flow_table *table, struct ofl_msg_
     entry->stats->priority         = mod->priority;
     entry->stats->idle_timeout     = mod->idle_timeout;
     entry->stats->hard_timeout     = mod->hard_timeout;
-    entry->stats->flags            = mod->flags;
     entry->stats->cookie           = mod->cookie;
     entry->no_pkt_count = ((mod->flags & OFPFF_NO_PKT_COUNTS) != 0 );
     entry->no_byt_count = ((mod->flags & OFPFF_NO_BYT_COUNTS) != 0 ); 

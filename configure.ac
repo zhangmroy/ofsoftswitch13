@@ -93,5 +93,6 @@ AC_CONFIG_FILES([Makefile
 #datapath/linux-2.6/Makefile
 #datapath/linux-2.6/Makefile.main
 #])
-
+CFLAGS="-g"
+CXXFLAGS="-g"
 AC_OUTPUT

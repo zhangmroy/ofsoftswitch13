@@ -1,4 +1,4 @@
-/* Copyright (c) 2008 The Board of Trustees of The Leland Stanford
+/* Copyright (c) 2008, 2009 The Board of Trustees of The Leland Stanford
  * Junior University
  * 
  * We are making the OpenFlow specification and associated documentation
@@ -31,20 +31,52 @@
  * derivatives without specific, written prior permission.
  */
 
-#ifndef CRC32_H
-#define CRC32_H 1
+#ifndef VCONN_H
+#define VCONN_H 1
 
-#include <stdint.h>
+#include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 
-#define CRC32_TABLE_BITS 8
-#define CRC32_TABLE_SIZE (1u << CRC32_TABLE_BITS)
+struct ofpbuf;
+struct flow;
+struct ofp_header;
+struct ofp_stats_reply;
+struct pvconn;
+struct vconn;
 
-struct crc32 {
-    unsigned int table[CRC32_TABLE_SIZE];
+void vconn_usage(bool active, bool passive, bool bootstrap);
+
+/* Active vconns: virtual connections to OpenFlow devices. */
+int vconn_open(const char *name, int min_version, struct vconn **);
+void vconn_close(struct vconn *);
+const char *vconn_get_name(const struct vconn *);
+uint32_t vconn_get_ip(const struct vconn *);
+bool vconn_is_reconnectable(const struct vconn *);
+int vconn_connect(struct vconn *);
+int vconn_recv(struct vconn *, struct ofpbuf **);
+int vconn_send(struct vconn *, struct ofpbuf *);
+int vconn_recv_xid(struct vconn *, uint32_t xid, struct ofpbuf **);
+int vconn_transact(struct vconn *, struct ofpbuf *, struct ofpbuf **);
+
+int vconn_open_block(const char *name, int min_version, struct vconn **);
+int vconn_send_block(struct vconn *, struct ofpbuf *);
+int vconn_recv_block(struct vconn *, struct ofpbuf **);
+
+enum vconn_wait_type {
+    WAIT_CONNECT,
+    WAIT_RECV,
+    WAIT_SEND
 };
+void vconn_wait(struct vconn *, enum vconn_wait_type);
+void vconn_connect_wait(struct vconn *);
+void vconn_recv_wait(struct vconn *);
+void vconn_send_wait(struct vconn *);
 
-void crc32_init(struct crc32 *, unsigned int polynomial);
-unsigned int crc32_calculate(const struct crc32 *, const void *, size_t);
+/* Passive vconns: virtual listeners for incoming OpenFlow connections. */
+int pvconn_open(const char *name, struct pvconn **);
+void pvconn_close(struct pvconn *);
+int pvconn_accept(struct pvconn *, int min_version, struct vconn **);
+void pvconn_wait(struct pvconn *);
 
-#endif /* crc32.h */
+#endif /* vconn.h */

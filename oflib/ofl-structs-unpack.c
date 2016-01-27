@@ -192,9 +192,6 @@ ofl_structs_instructions_unpack(struct ofp_instruction *src, size_t *len, struct
             }
             break;
         }
-        default:
-            OFL_LOG_WARN(LOG_MODULE, "The received instruction type (%u) is invalid.", ntohs(src->type));
-            return ofl_error(OFPET_BAD_INSTRUCTION, OFPBIC_UNKNOWN_INST);
     }
 
     // must set type before check, so free works correctly
@@ -214,7 +211,7 @@ ofl_structs_instructions_unpack(struct ofp_instruction *src, size_t *len, struct
 }
 
 static ofl_err 
-ofl_structs_table_properties_unpack(struct ofp_table_feature_prop_header * src, size_t *len, struct ofl_table_feature_prop_header **dst, struct ofl_exp *exp UNUSED){
+ofl_structs_table_properties_unpack(struct ofp_table_feature_prop_header * src, size_t *len, struct ofl_table_feature_prop_header **dst, struct ofl_exp *exp){
     size_t plen;
     ofl_err error;
     struct ofl_table_feature_prop_header * prop = NULL;
@@ -226,7 +223,7 @@ ofl_structs_table_properties_unpack(struct ofp_table_feature_prop_header * src, 
     
     if (*len < ntohs(src->length)) {
         OFL_LOG_WARN(LOG_MODULE, "Received table property has invalid length (set to %u, but only %zu received).", ntohs(src->length), *len);
-        return ofl_error(OFPET_TABLE_FEATURES_FAILED, OFPTFFC_BAD_LEN);
+        return ofl_error(OFPET_BAD_ACTION, OFPBAC_BAD_LEN);
     }
     plen = ntohs(src->length);
     
@@ -340,11 +337,7 @@ ofl_structs_table_properties_unpack(struct ofp_table_feature_prop_header * src, 
 
 			break;
 		}				
-	default:
-            OFL_LOG_WARN(LOG_MODULE, "The received property contained a unknown property (%u).", ntohs(src->type));
-            return ofl_error(OFPET_TABLE_FEATURES_FAILED, OFPTFFC_BAD_TYPE);
 	}
-
     // must set type before check, so free works correctly
     prop->type = (enum ofp_table_feature_prop_type) ntohs(src->type);
     /* Make sure it can be reused for packing. Jean II */
@@ -522,7 +515,6 @@ ofl_structs_flow_stats_unpack(struct ofp_flow_stats *src, uint8_t *buf, size_t *
     s->priority =      ntohs( src->priority);
     s->idle_timeout =  ntohs( src->idle_timeout);
     s->hard_timeout =  ntohs( src->hard_timeout);
-    s->flags        =  ntohs( src->flags);
     s->cookie =        ntoh64(src->cookie);
     s->packet_count =  ntoh64(src->packet_count);
     s->byte_count =    ntoh64(src->byte_count);

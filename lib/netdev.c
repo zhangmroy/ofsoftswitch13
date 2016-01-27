@@ -71,7 +71,6 @@
 #include <fcntl.h>
 #include <arpa/inet.h>
 #include <inttypes.h>
-#include <linux/rtnetlink.h>
 #include <linux/if_tun.h>
 #include <linux/if_packet.h>
 
@@ -97,6 +96,7 @@
 #endif
 
 #include <linux/ethtool.h>
+#include <linux/rtnetlink.h>
 #include <linux/sockios.h>
 #include <linux/version.h>
 #include <sys/types.h>
@@ -140,8 +140,6 @@ struct netdev {
     int netdev_fd;              /* Network device. */
     int tap_fd;                 /* TAP character device, if any, otherwise the
                                  * network device. */
-
-    int netlink_fd;
 
     /* one socket per queue.These are valid only for ordinary network devices*/
     int queue_fd[NETDEV_MAX_QUEUES + 1];
@@ -723,9 +721,7 @@ do_open_netdev(const char *name, int ethertype, int tap_fd,
                struct netdev **netdev_)
 {
     int netdev_fd;
-    int netlink_fd;
     struct sockaddr_ll sll;
-    struct sockaddr_nl snl;
     struct ifreq ifr;
     unsigned int ifindex;
     uint8_t etheraddr[ETH_ADDR_LEN];
@@ -735,22 +731,9 @@ do_open_netdev(const char *name, int ethertype, int tap_fd,
     int hwaddr_family;
     int error;
     struct netdev *netdev;
-    uint32_t val;
 
     init_netdev();
     *netdev_ = NULL;
-
-    netlink_fd = socket(PF_NETLINK, SOCK_RAW, NETLINK_ROUTE);
-
-    if (netlink_fd < 0) {
-        return errno;
-    }
-
-    /* Set non-blocking mode. */
-    error = set_nonblocking(netlink_fd);
-    if (error) {
-        goto error_already_set;
-    }
 
     /* Create raw socket. */
     netdev_fd = socket(PF_PACKET, SOCK_RAW,
@@ -762,10 +745,10 @@ do_open_netdev(const char *name, int ethertype, int tap_fd,
         return errno;
     }
   #ifdef HAVE_PACKET_AUXDATA
-        val = 1;
+        uint32_t val = 1;
           if (setsockopt(netdev_fd, SOL_PACKET, PACKET_AUXDATA, &val,
                sizeof val) == -1 && errno != ENOPROTOOPT){
-              VLOG_ERR(LOG_MODULE, "setsockopt(SO_RCVBUF,%"PRIu32"): %s", val, strerror(errno));
+              VLOG_ERR(LOG_MODULE, "setsockopt(SO_RCVBUF,%zu): %s", val, strerror(errno));
           }
   #endif
 
@@ -775,14 +758,6 @@ do_open_netdev(const char *name, int ethertype, int tap_fd,
         goto error_already_set;
     }
 
-    memset (&snl,0,sizeof(snl));
-    snl.nl_family = AF_NETLINK;
-    snl.nl_groups =  RTMGRP_LINK;
-
-    if (bind(netlink_fd, (struct sockaddr *)&snl, sizeof(snl)) < 0){
-        VLOG_ERR(LOG_MODULE, "netlink bind to %s failed: %s", name, strerror(errno));
-        goto error;
-    }
     /* Get ethernet device index. */
     strncpy(ifr.ifr_name, name, sizeof ifr.ifr_name);
     if (ioctl(netdev_fd, SIOCGIFINDEX, &ifr) < 0) {
@@ -850,7 +825,6 @@ do_open_netdev(const char *name, int ethertype, int tap_fd,
     netdev->txqlen = txqlen;
     netdev->hwaddr_family = hwaddr_family;
     netdev->netdev_fd = netdev_fd;
-    netdev->netlink_fd = netlink_fd;
     netdev->tap_fd = tap_fd < 0 ? netdev_fd : tap_fd;
     netdev->queue_fd[0] = netdev->tap_fd;
     memcpy(netdev->etheraddr, etheraddr, sizeof etheraddr);
@@ -928,40 +902,6 @@ pad_to_minimum_length(struct ofpbuf *buffer)
     }
 }
 
-int
-netdev_link_state(struct netdev *netdev)
-{
-     int len;
-     char buff[4096];
-     struct nlmsghdr *nlm;
-     struct ifinfomsg *ifa;
-     enum netdev_flags flags;
-     nlm = (struct nlmsghdr *)buff;
-     do
-     {
-        len = recv (netdev->netlink_fd,nlm,4096,0);
-        for (;(NLMSG_OK (nlm, len)) && (nlm->nlmsg_type != NLMSG_DONE); nlm = NLMSG_NEXT(nlm, len))
-         {
-             if (nlm->nlmsg_type != RTM_NEWLINK)
-                continue;
-             ifa = (struct ifinfomsg *) NLMSG_DATA (nlm);
-             if (ifa->ifi_index == netdev->ifindex){
-                 if (ifa->ifi_flags & IFF_UP){
-                     netdev_nodev_get_flags(netdev->name, &flags);
-                     netdev_set_flags(netdev, flags, false);
-                     return NETDEV_LINK_UP;
-                 }
-                 else {
-                     netdev_nodev_get_flags(netdev->name, &flags);
-                     netdev_set_flags(netdev, flags, false);
-                     return NETDEV_LINK_DOWN;
-                 }
-	     }
-         }
-     } while (len < 0 && errno == EINTR);
-     return NETDEV_LINK_NO_CHANGE;
-}
-
 /* Attempts to receive a packet from 'netdev' into 'buffer', which the caller
  * must have initialized with sufficient room for the packet.  The space
  * required to receive any packet is ETH_HEADER_LEN bytes, plus VLAN_HEADER_LEN
@@ -975,8 +915,9 @@ netdev_link_state(struct netdev *netdev)
  * be returned.
  */
 int
-netdev_recv(struct netdev *netdev, struct ofpbuf *buffer, size_t max_mtu)
+netdev_recv(struct netdev *netdev, struct ofpbuf *buffer)
 {
+
 #ifdef HAVE_PACKET_AUXDATA
     /* Code from libpcap to reconstruct VLAN header */
     struct iovec    iov;
@@ -1009,7 +950,7 @@ netdev_recv(struct netdev *netdev, struct ofpbuf *buffer, size_t max_mtu)
     msg.msg_controllen  = sizeof(cmsg_buf);
     msg.msg_flags   = 0;
 
-    iov.iov_len   = max_mtu;
+    iov.iov_len   = buffer->allocated;
     iov.iov_base    = buffer->data;
 
 #else
@@ -1034,6 +975,7 @@ netdev_recv(struct netdev *netdev, struct ofpbuf *buffer, size_t max_mtu)
             n_bytes = recvfrom(netdev->tap_fd, ofpbuf_tail(buffer),
                                (ssize_t)ofpbuf_tailroom(buffer), 0,
                                (struct sockaddr *)&sll, &sll_len);
+
 #endif /* ifdef HAVE_PACKET_AUXDATA  */
         } while (n_bytes < 0 && errno == EINTR);
     }
@@ -1050,7 +992,7 @@ netdev_recv(struct netdev *netdev, struct ofpbuf *buffer, size_t max_mtu)
             for (cmsg = CMSG_FIRSTHDR(&msg); cmsg; cmsg = CMSG_NXTHDR(&msg, cmsg)) {
                 struct tpacket_auxdata *aux;
                 struct vlan_tag *tag;
-                uint16_t eth_type;
+
                 buffer->size += n_bytes;
 
                 if (cmsg->cmsg_len < CMSG_LEN(sizeof(struct tpacket_auxdata)) ||
@@ -1059,23 +1001,15 @@ netdev_recv(struct netdev *netdev, struct ofpbuf *buffer, size_t max_mtu)
                     continue;
                 }
                 aux = (struct tpacket_auxdata *)CMSG_DATA(cmsg);
-                if (aux->tp_vlan_tci == 0){
+                if (aux->tp_vlan_tci == 0)
                   continue;
-                }
                 /* VLAN tag found. Shift MAC addresses down and insert VLAN tag */
                 /* Create headroom for the VLAN tag */
-                eth_type = ntohs(*((uint16_t *)(buffer->data + ETHER_ADDR_LEN * 2)));                
+                ofpbuf_reserve(buffer, VLAN_HEADER_LEN);
                 ofpbuf_push_uninit(buffer, VLAN_HEADER_LEN);
                 memmove(buffer->data, (uint8_t*)buffer->data+VLAN_HEADER_LEN, ETH_ALEN * 2);
                 tag = (struct vlan_tag *)((uint8_t*)buffer->data + ETH_ALEN * 2);
-                if (eth_type == ETH_TYPE_VLAN_PBB_S || 
-                    eth_type == ETH_TYPE_VLAN_PBB_B || 
-                    eth_type == ETH_TYPE_VLAN){
-                    tag->vlan_tp_id = htons(ETH_TYPE_VLAN_PBB_B);
-                }
-                else {
-                    tag->vlan_tp_id = htons(ETH_P_8021Q);
-                }
+                tag->vlan_tp_id = htons(ETH_P_8021Q);
                 tag->vlan_tci = htons(aux->tp_vlan_tci);
             }
 #else
@@ -1085,14 +1019,15 @@ netdev_recv(struct netdev *netdev, struct ofpbuf *buffer, size_t max_mtu)
         if (sll.sll_pkttype == PACKET_OUTGOING) {
             return EAGAIN;
         }
-        buffer->size += n_bytes;        
-#endif
+        buffer->size += n_bytes;
+
         /* When the kernel internally sends out an Ethernet frame on an
          * interface, it gives us a copy *before* padding the frame to the
          * minimum length.  Thus, when it sends out something like an ARP
          * request, we see a too-short frame.  So pad it out to the minimum
          * length. */
         pad_to_minimum_length(buffer);
+#endif
         return 0;
     }
 
@@ -1142,6 +1077,7 @@ netdev_send(struct netdev *netdev, const struct ofpbuf *buffer,
     do {
         n_bytes = write(netdev->queue_fd[class_id], buffer->data, buffer->size);
     } while (n_bytes < 0 && errno == EINTR);
+
     if (n_bytes < 0) {
         /* The Linux AF_PACKET implementation never blocks waiting for room
          * for packets, instead returning ENOBUFS.  Translate this into EAGAIN

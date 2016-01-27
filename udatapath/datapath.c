@@ -195,7 +195,7 @@ dp_run(struct datapath *dp) {
         pipeline_timeout(dp->pipeline);
     }
 
-    poll_timer_wait(100);
+    poll_timer_wait(1000);
     dp_ports_run(dp);
 
     /* Talk to remotes. */
@@ -249,7 +249,7 @@ remote_run(struct datapath *dp, struct remote *r)
 
 static void
 remote_rconn_run(struct datapath *dp, struct remote *r, uint8_t conn_id) {
-    struct rconn *rconn = NULL;
+    struct rconn *rconn;
     ofl_err error;
     size_t i;
 
@@ -337,9 +337,6 @@ remote_destroy(struct remote *r)
             rconn_destroy(r->rconn_aux);
         }
         rconn_destroy(r->rconn);
-	if(r->mp_req_msg != NULL) {
-	  ofl_msg_free((struct ofl_msg_header *) r->mp_req_msg, NULL);
-	}
         free(r);
     }
 }
@@ -354,8 +351,6 @@ remote_create(struct datapath *dp, struct rconn *rconn, struct rconn *rconn_aux)
     remote->rconn_aux = rconn_aux;
     remote->cb_dump = NULL;
     remote->n_txq = 0;
-    remote->mp_req_msg = NULL;
-    remote->mp_req_xid = 0;  /* Currently not needed. Jean II. */
     remote->role = OFPCR_ROLE_EQUAL;
     /* Set the remote configuration to receive any asynchronous message*/
     for(i = 0; i < 2; i++){
@@ -487,20 +482,20 @@ send_openflow_buffer(struct datapath *dp, struct ofpbuf *buffer,
                             continue;
                         if((p->reason == OFPPR_DELETE) && !(r->config.port_status_mask[0] & 0x2))
                             continue;
-                        if((p->reason == OFPPR_MODIFY) && !(r->config.port_status_mask[0] & 0x4))
+                        if((p->reason == OFPPR_MODIFY) && !(r->config.packet_in_mask[0] & 0x4))
                             continue;
                     }
                     case (OFPT_FLOW_REMOVED):{
                         struct ofp_flow_removed *p= (struct ofp_flow_removed *)buffer->data;
-                        if((p->reason == OFPRR_IDLE_TIMEOUT) && !(r->config.flow_removed_mask[0] & 0x1))
+                        if((p->reason == OFPRR_IDLE_TIMEOUT) && !(r->config.port_status_mask[0] & 0x1))
                             continue;
-                        if((p->reason == OFPRR_HARD_TIMEOUT) && !(r->config.flow_removed_mask[0] & 0x2))
+                        if((p->reason == OFPRR_HARD_TIMEOUT) && !(r->config.port_status_mask[0] & 0x2))
                             continue;
-                        if((p->reason == OFPRR_DELETE) && !(r->config.flow_removed_mask[0] & 0x4))
+                        if((p->reason == OFPRR_DELETE) && !(r->config.packet_in_mask[0] & 0x4))
                             continue;
-                        if((p->reason == OFPRR_GROUP_DELETE) && !(r->config.flow_removed_mask[0] & 0x8))
+                        if((p->reason == OFPRR_GROUP_DELETE) && !(r->config.packet_in_mask[0] & 0x8))
                             continue;
-                        if((p->reason == OFPRR_METER_DELETE) && !(r->config.flow_removed_mask[0] & 0x10))
+                        if((p->reason == OFPRR_METER_DELETE) && !(r->config.packet_in_mask[0] & 0x10))
                             continue;
                     }
                 }
@@ -517,7 +512,7 @@ send_openflow_buffer(struct datapath *dp, struct ofpbuf *buffer,
                         continue;
                     if((p->reason == OFPPR_DELETE) && !(r->config.port_status_mask[1] & 0x2))
                         continue;
-                    if((p->reason == OFPPR_MODIFY) && !(r->config.port_status_mask[1] & 0x4))
+                    if((p->reason == OFPPR_MODIFY) && !(r->config.packet_in_mask[1] & 0x4))
                         continue;
                 }
             }
@@ -591,9 +586,8 @@ dp_handle_set_desc(struct datapath *dp, struct ofl_exp_openflow_msg_set_dp_desc 
 static ofl_err
 dp_check_generation_id(struct datapath *dp, uint64_t new_gen_id){
 
-    if(dp->generation_id >= 0  && ((int64_t)(new_gen_id - dp->generation_id) < 0) ){        
+    if(dp->generation_id >= 0  && ((uint64_t)(new_gen_id - dp->generation_id) < 0) )
         return ofl_error(OFPET_ROLE_REQUEST_FAILED, OFPRRFC_STALE);
-    }
     else dp->generation_id = new_gen_id;
     return 0;
 

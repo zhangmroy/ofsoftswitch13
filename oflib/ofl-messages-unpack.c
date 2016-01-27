@@ -201,9 +201,9 @@ ofl_msg_unpack_async_config(struct ofp_header *src, size_t *len, struct ofl_msg_
     dac = (struct ofl_msg_async_config*)malloc(sizeof(struct ofl_msg_async_config));
     dac->config = (struct ofl_async_config*) malloc(sizeof(struct ofl_async_config));
     for(i = 0; i < 2; i++){
-        dac->config->packet_in_mask[i] = ntohl(sac->packet_in_mask[i]);
-        dac->config->port_status_mask[i] = ntohl(sac->port_status_mask[i]);
-        dac->config->flow_removed_mask[i] =  ntohl(sac->flow_removed_mask[i]);
+        dac->config->packet_in_mask[i] = sac->packet_in_mask[i];
+        dac->config->port_status_mask[i] = sac->port_status_mask[i];
+        dac->config->flow_removed_mask[i] =  sac->flow_removed_mask[i];
     }
     
     *msg = (struct ofl_msg_header*)dac;
@@ -384,7 +384,7 @@ ofl_msg_unpack_packet_out(struct ofp_header *src, size_t *len, struct ofl_msg_he
     dp = (struct ofl_msg_packet_out *)malloc(sizeof(struct ofl_msg_packet_out));
 
     dp->buffer_id = ntohl(sp->buffer_id);
-    dp->in_port = ntohl(sp->in_port);	
+
     if (*len < ntohs(sp->actions_len)) {
         OFL_LOG_WARN(LOG_MODULE, "Received PACKET_OUT message has invalid action length (%zu).", *len);
         free(dp);
@@ -443,7 +443,7 @@ ofl_msg_unpack_flow_mod(struct ofp_header *src,uint8_t* buf, size_t *len, struct
 
     if (sm->table_id >= PIPELINE_TABLES && ((sm->command != OFPFC_DELETE
     || sm->command != OFPFC_DELETE_STRICT) && sm->table_id != OFPTT_ALL)) {
-        OFL_LOG_WARN(LOG_MODULE, "Received FLOW_MOD message has invalid table id (%d).", sm->table_id );
+        OFL_LOG_WARN(LOG_MODULE, "Received FLOW_MOD message has invalid table id (%zu).", sm->table_id );
         return ofl_error(OFPET_BAD_REQUEST, OFPBRC_BAD_TABLE_ID);
     } 
 
@@ -677,7 +677,7 @@ ofl_msg_unpack_table_mod(struct ofp_header *src, size_t *len, struct ofl_msg_hea
     sm = (struct ofp_table_mod *)src;
     dm = (struct ofl_msg_table_mod *)malloc(sizeof(struct ofl_msg_table_mod));
     if (sm->table_id >= PIPELINE_TABLES) {
-        OFL_LOG_WARN(LOG_MODULE, "Received TABLE_MOD message has invalid table id (%d).", sm->table_id );
+        OFL_LOG_WARN(LOG_MODULE, "Received TABLE_MOD message has invalid table id (%zu).", sm->table_id );
         return ofl_error(OFPET_BAD_REQUEST, OFPBRC_BAD_TABLE_ID);
     }
 
@@ -707,7 +707,7 @@ ofl_msg_unpack_multipart_request_flow(struct ofp_multipart_request *os, uint8_t*
     dm = (struct ofl_msg_multipart_request_flow *) malloc(sizeof(struct ofl_msg_multipart_request_flow));
 
     if (sm->table_id != OFPTT_ALL && sm->table_id >= PIPELINE_TABLES) {
-         OFL_LOG_WARN(LOG_MODULE, "Received MULTIPART REQUEST FLOW message has invalid table id (%d).", sm->table_id );
+         OFL_LOG_WARN(LOG_MODULE, "Received MULTIPART REQUEST FLOW message has invalid table id (%zu).", sm->table_id );
          return ofl_error(OFPET_BAD_REQUEST, OFPBRC_BAD_TABLE_ID);
     }
 
@@ -792,12 +792,6 @@ ofl_msg_unpack_multipart_request_table_features(struct ofp_multipart_request *os
 
     for(i = 0; i < dm->tables_num; i++){
         error = ofl_structs_table_features_unpack((struct ofp_table_features*) features, len, &dm->table_features[i] , exp);
-        if (error) {
-            OFL_UTILS_FREE_ARR_FUN2(dm->table_features, i,
-                                    ofl_structs_free_table_features, exp);
-            free(dm);
-            return error;
-        }
         features += ntohs(((struct ofp_table_features*) features)->length); 
     }   
     *msg = (struct ofl_msg_header *)dm;
@@ -1098,6 +1092,7 @@ ofl_msg_unpack_multipart_reply_port(struct ofp_multipart_reply *os, size_t *len,
     // ofp_multipart_reply was already checked and subtracted in unpack_multipart_reply
 
     stat = (struct ofp_port_stats *)os->body;
+    dm = (struct ofl_msg_multipart_reply_port *) malloc(sizeof(struct ofl_msg_multipart_reply_port));
 
     error = ofl_utils_count_ofp_port_stats(stat, *len, &dm->stats_num);
     if (error) {
@@ -1131,6 +1126,7 @@ ofl_msg_unpack_multipart_reply_queue(struct ofp_multipart_reply *os, size_t *len
     // ofp_multipart_reply was already checked and subtracted in unpack_multipart_reply
 
     stat = (struct ofp_queue_stats *)os->body;
+    dm = (struct ofl_msg_multipart_reply_queue *) malloc(sizeof(struct ofl_msg_multipart_reply_queue));
 
     error = ofl_utils_count_ofp_queue_stats(stat, *len, &dm->stats_num);
     if (error) {
@@ -1264,12 +1260,6 @@ ofl_msg_unpack_multipart_reply_table_features(struct ofp_multipart_reply *src, s
 
     for(i = 0; i < dm->tables_num; i++){
         error = ofl_structs_table_features_unpack((struct ofp_table_features*) features, len, &dm->table_features[i] , exp);
-        if (error) {
-            OFL_UTILS_FREE_ARR_FUN2(dm->table_features, i,
-                                    ofl_structs_free_table_features, exp);
-            free(dm);
-            return error;
-        }
         features += ntohs(((struct ofp_table_features*) features)->length); 
     }   
     *msg = (struct ofl_msg_header *)dm;

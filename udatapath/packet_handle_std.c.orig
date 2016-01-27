@@ -57,9 +57,6 @@ packet_handle_std_validate(struct packet_handle_std *handle) {
         free(iter->value);
         free(iter);
     }
-    // hsh
-    hmap_destroy(&handle->match.match_fields); //end
-
     ofl_structs_match_init(&handle->match);
 
     if (nblink_packet_parse(handle->pkt->buffer,&handle->match,

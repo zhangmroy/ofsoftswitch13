@@ -118,8 +118,6 @@ send_packet_to_controller(struct pipeline *pl, struct packet *pkt, uint8_t table
     ofl_structs_free_match((struct ofl_match_header* ) m, NULL);
 }
 
-/* Pass the packet through the flow tables.
- * This function takes ownership of the packet and will destroy it. */
 void
 pipeline_process_packet(struct pipeline *pl, struct packet *pkt) {
     struct flow_table *table, *next_table;
@@ -176,6 +174,7 @@ pipeline_process_packet(struct pipeline *pl, struct packet *pkt) {
                 because we cannot associate it to any
                 particular flow */
                 action_set_execute(pkt->action_set, pkt, 0xffffffffffffffff);
+                packet_destroy(pkt);
                 return;
             }
 
@@ -235,10 +234,6 @@ pipeline_handle_flow_mod(struct pipeline *pl, struct ofl_msg_flow_mod *msg,
                 return error;
             }
         }
-	/* Reject goto in the last table. */
-	if ((msg->table_id == (PIPELINE_TABLES - 1))
-	    && (msg->instructions[i]->type == OFPIT_GOTO_TABLE))
-	  return ofl_error(OFPET_BAD_INSTRUCTION, OFPBIC_UNSUP_INST);
     }
 
     if (msg->table_id == 0xff) {
@@ -373,173 +368,39 @@ ofl_err
 pipeline_handle_stats_request_table_features_request(struct pipeline *pl,
                                     struct ofl_msg_multipart_request_header *msg,
                                     const struct sender *sender) {
+    size_t i, j;
     struct ofl_table_features **features;
     struct ofl_msg_multipart_request_table_features *feat =
                        (struct ofl_msg_multipart_request_table_features *) msg;
-    int i;           /* Feature index in feature array. Jean II */
-    int table_id;
-    ofl_err error = 0;
 
-    /* Further validation of request not done in
-     * ofl_structs_table_features_unpack(). Jean II */
-    if(feat->table_features != NULL) {
-        for(i = 0; i < feat->tables_num; i++){
-	    if(feat->table_features[i]->table_id >= PIPELINE_TABLES)
-	        return ofl_error(OFPET_TABLE_FEATURES_FAILED, OFPTFFC_BAD_TABLE);
-	    /* We may want to validate things like config, max_entries,
-	     * metadata... */
-        }
-    }
-
-    /* Check if we already received fragments of a multipart request. */
-    if(sender->remote->mp_req_msg != NULL) {
-      bool nomore;
-
-      /* We can only merge requests having the same XID. */
-      if(sender->xid != sender->remote->mp_req_xid)
-	{
-	  VLOG_ERR(LOG_MODULE, "multipart request: wrong xid (0x%X != 0x%X)", sender->xid, sender->remote->mp_req_xid);
-
-	  /* Technically, as our buffer can only hold one pending request,
-	   * this is a buffer overflow ! Jean II */
-	  /* Return error. */
-	  return ofl_error(OFPET_BAD_REQUEST, OFPBRC_MULTIPART_BUFFER_OVERFLOW);
-	}
-
-      VLOG_DBG(LOG_MODULE, "multipart request: merging with previous fragments (%zu+%zu)", ((struct ofl_msg_multipart_request_table_features *) sender->remote->mp_req_msg)->tables_num, feat->tables_num);
-
-      /* Merge the request with previous fragments. */
-      nomore = ofl_msg_merge_multipart_request_table_features((struct ofl_msg_multipart_request_table_features *) sender->remote->mp_req_msg, feat);
-
-      /* Check if incomplete. */
-      if(!nomore)
-	return 0;
-
-      VLOG_DBG(LOG_MODULE, "multipart request: reassembly complete (%zu)", ((struct ofl_msg_multipart_request_table_features *) sender->remote->mp_req_msg)->tables_num);
-
-      /* Use the complete request. */
-      feat = (struct ofl_msg_multipart_request_table_features *) sender->remote->mp_req_msg;
-
-#if 0
-      {
-	char *str;
-	str = ofl_msg_to_string((struct ofl_msg_header *) feat, pl->dp->exp);
-	VLOG_DBG(LOG_MODULE, "\nMerged request:\n%s\n\n", str);
-	free(str);
-      }
-#endif
-
-    } else {
-      /* Check if the request is an initial fragment. */
-      if(msg->flags & OFPMPF_REQ_MORE) {
-	struct ofl_msg_multipart_request_table_features* saved_msg;
-
-	VLOG_DBG(LOG_MODULE, "multipart request: create reassembly buffer (%zu)", feat->tables_num);
-
-	/* Create a buffer the do reassembly. */
-	saved_msg = (struct ofl_msg_multipart_request_table_features*) malloc(sizeof(struct ofl_msg_multipart_request_table_features));
-	saved_msg->header.header.type = OFPT_MULTIPART_REQUEST;
-	saved_msg->header.type = OFPMP_TABLE_FEATURES;
-	saved_msg->header.flags = 0;
-	saved_msg->tables_num = 0;
-	saved_msg->table_features = NULL;
-
-	/* Save the fragment for later use. */
-	ofl_msg_merge_multipart_request_table_features(saved_msg, feat);
-	sender->remote->mp_req_msg = (struct ofl_msg_multipart_request_header *) saved_msg;
-	sender->remote->mp_req_xid = sender->xid;
-
-	return 0;
-      }
-
-      /* Non fragmented request. Nothing to do... */
-      VLOG_DBG(LOG_MODULE, "multipart request: non-fragmented request (%zu)", feat->tables_num);
-    }
-
-    /*Check to see if the body is empty.*/
-    /* Should check merge->tables_num instead. Jean II */
+    /*Check to see if the body is empty*/
     if(feat->table_features != NULL){
-        int last_table_id = 0;
-
-	/* Check that the table features make sense. */
+        /* Change tables configuration
+           TODO: Remove flows*/
         for(i = 0; i < feat->tables_num; i++){
-            /* Table-IDs must be in ascending order. */
-            table_id = feat->table_features[i]->table_id;
-            if(table_id < last_table_id) {
-                error = ofl_error(OFPET_TABLE_FEATURES_FAILED, OFPTFFC_BAD_TABLE);
-		break;
-            }
-            /* Can't go over out internal max-entries. */
-            if (feat->table_features[i]->max_entries > FLOW_TABLE_MAX_ENTRIES) {
-                error = ofl_error(OFPET_TABLE_FEATURES_FAILED, OFPTFFC_BAD_ARGUMENT);
-		break;
-            }
-        }
-
-        if (error == 0) {
-
-            /* Disable all tables, they will be selectively re-enabled. */
-            for(table_id = 0; table_id < PIPELINE_TABLES; table_id++){
-	        pl->tables[table_id]->disabled = true;
-            }
-            /* Change tables configuration
-               TODO: Remove flows*/
-            VLOG_DBG(LOG_MODULE, "pipeline_handle_stats_request_table_features_request: updating features");
-            for(i = 0; i < feat->tables_num; i++){
-                table_id = feat->table_features[i]->table_id;
-
-                /* Replace whole table feature. */
-                ofl_structs_free_table_features(pl->tables[table_id]->features, pl->dp->exp);
-                pl->tables[table_id]->features = feat->table_features[i];
-                feat->table_features[i] = NULL;
-
-                /* Re-enable table. */
-                pl->tables[table_id]->disabled = false;
-            }
+            pl->tables[feat->table_features[i]->table_id]->features = feat->table_features[i];
         }
     }
 
-    /* Cleanup request. */
-    if(sender->remote->mp_req_msg != NULL) {
-      ofl_msg_free((struct ofl_msg_header *) sender->remote->mp_req_msg, pl->dp->exp);
-      sender->remote->mp_req_msg = NULL;
-      sender->remote->mp_req_xid = 0;  /* Currently not needed. Jean II. */
-    }
-
-    if (error) {
-        return error;
-    }
-
-    table_id = 0;
+    j = 0;
     /* Query for table capabilities */
     loop: ;
     features = (struct ofl_table_features**) xmalloc(sizeof(struct ofl_table_features *) * 8);
-    /* Return 8 tables per reply segment. */
     for (i = 0; i < 8; i++){
-        /* Skip disabled tables. */
-        while((table_id < PIPELINE_TABLES) && (pl->tables[table_id]->disabled == true))
-	    table_id++;
-	/* Stop at the last table. */
-	if(table_id >= PIPELINE_TABLES)
-	    break;
-	/* Use that table in the reply. */
-        features[i] = pl->tables[table_id]->features;
-        table_id++;
+        features[i] = pl->tables[j]->features;
+        j++;
     }
-    VLOG_DBG(LOG_MODULE, "multipart reply: returning %d tables, next table-id %d", i, table_id);
     {
     struct ofl_msg_multipart_reply_table_features reply =
-         {{{.type = OFPT_MULTIPART_REPLY},
-           .type = OFPMP_TABLE_FEATURES,
-           .flags = (table_id == PIPELINE_TABLES ? 0x00000000 : OFPMPF_REPLY_MORE) },
+        {{{.type = OFPT_MULTIPART_REPLY},
+          .type = OFPMP_TABLE_FEATURES, .flags = j == PIPELINE_TABLES? 0x00000000:OFPMPF_REPLY_MORE},
           .table_features     = features,
-          .tables_num = i };
+          .tables_num = 8};
           dp_send_message(pl->dp, (struct ofl_msg_header *)&reply, sender);
     }
-    if (table_id < PIPELINE_TABLES){
+    if (j < PIPELINE_TABLES){
            goto loop;
     }
-    free(features);
 
     return 0;
 }
@@ -643,7 +504,7 @@ execute_entry(struct pipeline *pl, struct flow_entry *entry,
                     hmap_node, hash_int(OXM_OF_METADATA,0), &(*pkt)->handle_std->match.match_fields){
                     uint64_t *metadata = (uint64_t*) f->value;
                     *metadata = (*metadata & ~wi->metadata_mask) | (wi->metadata & wi->metadata_mask);
-                    VLOG_DBG_RL(LOG_MODULE, &rl, "Executing write metadata: %"PRIx64"", *metadata);
+                    VLOG_DBG_RL(LOG_MODULE, &rl, "Executing write metadata: %llx", *metadata);
                 }
                 break;
             }

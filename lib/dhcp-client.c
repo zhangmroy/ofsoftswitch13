@@ -931,7 +931,7 @@ do_receive_msg(struct dhclient *cli, struct dhcp_msg *msg)
         int error;
 
         ofpbuf_clear(&b);
-        error = netdev_recv(cli->netdev, &b, 0);
+        error = netdev_recv(cli->netdev, &b);
         if (error) {
             goto drained;
         }
@@ -997,7 +997,7 @@ do_send_msg(struct dhclient *cli, const struct dhcp_msg *msg)
     memcpy(eh.eth_dst, eth_addr_broadcast, ETH_ADDR_LEN);
     eh.eth_type = htons(ETH_TYPE_IP);
 
-    nh.ip_ihl_ver = IP_IHL_VER(5, IPV4_VERSION);
+    nh.ip_ihl_ver = IP_IHL_VER(5, IP_VERSION);
     nh.ip_tos = 0;
     nh.ip_tot_len = htons(IP_HEADER_LEN + UDP_HEADER_LEN + b.size);
     /* We can't guarantee uniqueness of ip_id versus the host's, screwing up
@@ -1047,7 +1047,7 @@ do_send_msg(struct dhclient *cli, const struct dhcp_msg *msg)
         } else {
             VLOG_INFO(LOG_MODULE, "sending %s", dhcp_type_name(msg->type));
         }
-        error = netdev_send(cli->netdev, &b, ETH_TOTAL_MAX);
+        error = netdev_send(cli->netdev, &b, 0);
         if (error) {
             VLOG_ERR(LOG_MODULE, "send failed on %s: %s",
                      netdev_get_name(cli->netdev), strerror(error));

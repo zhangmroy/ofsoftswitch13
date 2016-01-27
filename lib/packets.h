@@ -221,7 +221,8 @@ BUILD_ASSERT_DECL(VLAN_ETH_HEADER_LEN == sizeof(struct vlan_eth_header));
 
 
 
-#define IPV4_VERSION 4
+#define IP_VERSION 4
+
 #define IP_DONT_FRAGMENT  0x4000 /* Don't fragment. */
 #define IP_MORE_FRAGMENTS 0x2000 /* More fragments. */
 #define IP_FRAG_OFF_MASK  0x1fff /* Fragment offset. */
@@ -258,12 +259,8 @@ BUILD_ASSERT_DECL(IP_HEADER_LEN == sizeof(struct ip_header));
 #define IPV6_TC(ipv6_ver_tc_fl) ((ipv6_ver_tc_fl) & 0xff00000)
 #define IPV6_FLABEL(ipv6_ver_tc_fl) ((ipv6_ver_tc_fl) & 0xffff)
 
-#define IPV6_VERSION 6
-#define IPV6_DSCP_MASK 0x0fc00000
-#define IPV6_DSCP_SHIFT 22
-#define IPV6_ECN_MASK 0x0003
-#define IPV6_ECN_SHIFT 20
-#define IPV6_FLABEL_MASK 0x000fffff
+#define IPV6_FLABEL_MASK 0xfffff
+
 #define IPV6_HEADER_LEN 40
 struct ipv6_header {
     uint32_t ipv6_ver_tc_fl;
@@ -304,14 +301,12 @@ struct ipv6_nd_header{
     uint32_t reserved;
     struct in6_addr target_addr;
 };
-BUILD_ASSERT_DECL(IPV6_ND_HEADER_LEN == sizeof(struct ipv6_nd_header));
 
 #define IPV6_ND_OPT_HD_LEN 2
 struct ipv6_nd_options_hd{
     uint8_t type;
     uint8_t length;
 };
-BUILD_ASSERT_DECL(IPV6_ND_OPT_HD_LEN == sizeof(struct ipv6_nd_options_hd));
 
 #define UDP_HEADER_LEN 8
 struct udp_header {
@@ -349,7 +344,7 @@ BUILD_ASSERT_DECL(TCP_HEADER_LEN == sizeof(struct tcp_header));
 struct sctp_header {
     uint16_t sctp_src;
     uint16_t sctp_dst;
-    uint32_t sctp_ver_tag;
+    uint32_t sctp_verif;
     uint32_t sctp_csum;
 };
 BUILD_ASSERT_DECL(SCTP_HEADER_LEN == sizeof(struct sctp_header));
@@ -381,8 +376,6 @@ struct qtag_prefix {
     uint16_t tci;
 };
 
-
-#define PBB_ISID_LEN 3
 #define PBB_HEADER_LEN 18
 #define PBB_ISID_MASK 0xffffff
 

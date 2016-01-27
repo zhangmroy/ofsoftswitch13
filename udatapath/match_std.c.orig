@@ -82,7 +82,6 @@ match_mask32(uint8_t *a, uint8_t *am, uint8_t *b) {
     uint32_t *mask = (uint32_t *) am;
 
 //hsh    return (((~*mask) & (*a1 ^ *b1)) == 0);
-//jzg    return (((*mask & *a1) ^ (*mask & *b1)) == 0);
     return (((*mask) & (*a1 ^ *b1)) == 0);
 }
 
@@ -303,9 +302,7 @@ strict_mask32(uint8_t *a, uint8_t *b, uint8_t *am, uint8_t *bm) {
     uint32_t *b1 = (uint32_t *) b;
     uint32_t *mask_a = (uint32_t *) am;
     uint32_t *mask_b = (uint32_t *) bm;
-//hsh    return ((*mask_a == *mask_b) && ((*a1 ^ *b1) & ~(*mask_a))) == 0;
-//jzg    return ((*mask_a == *mask_b) && ((*a1 ^ *b1) & (*mask_a))) == 0;
-	return ((*mask_a == *mask_b) && !((*a1 ^ *b1) & (*mask_a)));
+    return ((*mask_a == *mask_b) && ((*a1 ^ *b1) & ~(*mask_a))) == 0;
 }
 
 static inline bool
@@ -470,8 +467,7 @@ nonstrict_mask32(uint8_t *a, uint8_t *b, uint8_t *am, uint8_t *bm) {
     uint32_t *b1 = (uint32_t *) b;
     uint32_t *mask_a = (uint32_t *) am;
     uint32_t *mask_b = (uint32_t *) bm;
-//jzg    return (~(*mask_a) & (~(*a1) | ~(*b1) | *mask_b) & (*a1| *b1 | *mask_b)) == 0;
-    return ((*mask_a & *a1) ^ (*mask_b & *b1)) == 0;
+    return (~(*mask_a) & (~(*a1) | ~(*b1) | *mask_b) & (*a1| *b1 | *mask_b)) == 0;
 }
 
 static inline bool
@@ -638,13 +634,7 @@ incompatible_32(uint8_t *a, uint8_t *b, uint8_t *am, uint8_t *bm) {
     uint32_t *mask_a = (uint32_t *) am;
     uint32_t *mask_b = (uint32_t *) bm;
 
-//jzg    return (( ~(*mask_a|*mask_b) & (*a1^*b1) ) != 0);
-    if ( 0 == *mask_a && 0 == *mask_b )
-    {
-        return ((*a1 ^ *b1) != 0);
-    }
-
-    return (( (*a1 & *mask_a) ^ (*b1 & *mask_b) ) != 0);
+    return (( ~(*mask_a|*mask_b) & (*a1^*b1) ) != 0);
 }
 
 static inline bool

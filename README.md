@@ -12,10 +12,7 @@ The following components are available in this package:
 
 # Getting Started
 
-These instructions have been tested on Ubuntu 12.04. Other distributions or versions may need different steps. 
-
-For Ubuntu 14.04, please check @castroflavio solution:
-[How to compile on Ubuntu 14.04][compileubuntu14]
+These instructions have been tested on Ubuntu 12.04. Other distributions or versions may need different steps.
 
 ## Before building
 The switch makes use of the NetBee library to parse packets, so we need to install it first.
@@ -23,10 +20,10 @@ The switch makes use of the NetBee library to parse packets, so we need to insta
 1. Install the following packages:
 
     ```
-    $ sudo apt-get install cmake libpcap-dev libxerces-c2-dev libpcre3-dev flex bison pkg-config autoconf libtool libboost-dev
+    $ sudo apt-get install cmake libpcap-dev libxerces-c2-dev libpcre3-dev flex bison
     ```
 
-2. Download the most recent Netbee version, and unpack the source code from:http://www.nbee.org/download/nbeesrc-jan-10-2013.php
+2. Download and unpack the source code from: http://www.nbee.org/download/nbeesrc-12-05-16.php
 
 3. Create the build system
 
@@ -60,7 +57,7 @@ The switch makes use of the NetBee library to parse packets, so we need to insta
     ```
 
 ## Building
-Run the following commands in the `ofsoftswitch13` directory to build and install everything:
+Run the following commands in the `of13softswitch` directory to build and install everything:
 
     $ ./boot.sh
     $ ./configure
@@ -154,8 +151,7 @@ Hiroyasu OHYAMA, correct URL of NetBee Library.
 *know if we forgot to add your name to the list of contributors!*
 
 # Contact
-E-mail: Eder Leao Fernandes (ederleaofernandes at gmail . com)
+E-mail: Eder Leao Fernandes (ederlf@cpqd.com.br)
 
 [ofp13]: https://www.opennetworking.org/images/stories/downloads/specification/openflow-spec-v1.3.0.pdf
 [ericssonsw11]: https://github.com/TrafficLab/of11softswitch
-[compileubuntu14]: http://tocai.dia.uniroma3.it/compunet-wiki/index.php/Installing_and_setting_up_OpenFlow_tools

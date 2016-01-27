@@ -215,8 +215,8 @@
 
 #define OXM_OF_MPLS_BOS OXM_HEADER      (0x8000, 36, 1)
 
-#define OXM_OF_PBB_ISID OXM_HEADER      (0x8000, 37, 3)
-#define OXM_OF_PBB_ISID_W OXM_HEADER_W  (0x8000, 37, 3)
+#define OXM_OF_PBB_ISID OXM_HEADER      (0x8000, 37, 4)
+#define OXM_OF_PBB_ISID_W OXM_HEADER_W  (0x8000, 37, 4)
 
 #define OXM_OF_TUNNEL_ID OXM_HEADER     (0x8000, 38, 8)
 #define OXM_OF_TUNNEL_ID_W OXM_HEADER_W (0x8000, 38, 8)
@@ -298,24 +298,6 @@ struct oxm_field {
 
 /* All the known fields. */
 extern struct oxm_field all_fields[NUM_OXM_FIELDS];
-
-bool 
-check_bad_wildcard(uint8_t value, uint8_t mask);
-
-bool 
-check_bad_wildcard16(uint16_t value, uint16_t mask);
-
-bool 
-check_bad_wildcard32(uint32_t value, uint32_t mask);
-
-bool 
-check_bad_wildcard48(uint8_t *value, uint8_t *mask);
-
-bool 
-check_bad_wildcard64(uint64_t value, uint64_t mask);
-
-bool 
-check_bad_wildcard128(uint8_t *value, uint8_t *mask);
 
 struct oxm_field *
 oxm_field_lookup(uint32_t header);

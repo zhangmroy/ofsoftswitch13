@@ -229,7 +229,6 @@ void
 dp_ports_run(struct datapath *dp) {
     // static, so an unused buffer can be reused at the dp_ports_run call
     static struct ofpbuf *buffer = NULL;
-    int max_mtu = 0;
 
     struct sw_port *p, *pn;
 
@@ -248,28 +247,8 @@ dp_ports_run(struct datapath *dp) {
     }
 #endif
 
-    // find largest MTU on our interfaces
-    // buffer is shared among all (idle) interfaces...
-    LIST_FOR_EACH_SAFE (p, pn, struct sw_port, node, &dp->port_list) {
-        if (IS_HW_PORT(p)) 
-            continue;
-        const int mtu = netdev_get_mtu(p->netdev);
-        if (mtu > max_mtu)
-            max_mtu = mtu;
-    }
-
     LIST_FOR_EACH_SAFE (p, pn, struct sw_port, node, &dp->port_list) {
         int error;
-        /* Check for interface state change */
-        enum netdev_link_state link_state = netdev_link_state(p->netdev);
-        if (link_state == NETDEV_LINK_UP){
-            p->conf->state &= ~OFPPS_LINK_DOWN;
-            dp_port_live_update(p);
-        }
-        else if (link_state == NETDEV_LINK_DOWN){
-            p->conf->state |= OFPPS_LINK_DOWN;
-            dp_port_live_update(p);
-        }
 
         if (IS_HW_PORT(p)) {
             continue;
@@ -279,9 +258,14 @@ dp_ports_run(struct datapath *dp) {
              * to the controller or adding a vlan tag, plus an extra 2 bytes to
              * allow IP headers to be aligned on a 4-byte boundary.  */
             const int headroom = 128 + 2;
-            buffer = ofpbuf_new_with_headroom(VLAN_ETH_HEADER_LEN + max_mtu, headroom);
+            const int hard_header = VLAN_ETH_HEADER_LEN;
+            const int mtu = netdev_get_mtu(p->netdev);
+            buffer = ofpbuf_new_with_headroom(hard_header + mtu, headroom);
         }
-        error = netdev_recv(p->netdev, buffer, VLAN_ETH_HEADER_LEN + max_mtu);
+        error = netdev_recv(p->netdev, buffer);
+        if (error == ENETDOWN){
+            VLOG_ERR(LOG_MODULE, "Não tenho nada mas tô aqui...");
+        }
         if (!error) {
             p->stats->rx_packets++;
             p->stats->rx_bytes += buffer->size;
@@ -289,6 +273,9 @@ dp_ports_run(struct datapath *dp) {
             process_buffer(dp, p, buffer);
             buffer = NULL;
         } else if (error != EAGAIN) {
+            if(error == ENETDOWN){
+                p->conf->state = OFPPS_LINK_DOWN;
+            }
             VLOG_ERR_RL(LOG_MODULE, &rl, "error receiving data from %s: %s",
                         netdev_get_name(p->netdev), strerror(error));
         }
@@ -411,7 +398,6 @@ new_port(struct datapath *dp, struct sw_port *port, uint32_t port_no,
         / * FIXME:  Add current, supported and advertised features * /
 #endif
     }
-    dp_port_live_update(port);
 
     port->stats = xmalloc(sizeof(struct ofl_port_stats));
     port->stats->port_no = port_no;
@@ -562,7 +548,7 @@ dp_ports_lookup_queue(struct sw_port *p, uint32_t queue_id)
 {
     struct sw_queue *q;
 
-    if (queue_id < p->max_queues) {
+    if (queue_id <= p->max_queues) {
         q = &(p->queues[queue_id]);
 
         if (q->port != NULL) {
@@ -658,6 +644,7 @@ dp_ports_output_all(struct datapath *dp, struct ofpbuf *buffer, int in_port, boo
         if (flood && p->conf->config & OFPPC_NO_FWD) {
             continue;
         }
+
         dp_ports_output(dp, buffer, p->stats->port_no, 0);
     }
 
@@ -689,7 +676,6 @@ dp_ports_handle_port_mod(struct datapath *dp, struct ofl_msg_port_mod *msg,
     if (msg->mask) {
         p->conf->config &= ~msg->mask;
         p->conf->config |= msg->config & msg->mask;
-        dp_port_live_update(p);
     }
 
     /*Notify all controllers that the port status has changed*/
@@ -706,20 +692,7 @@ dp_ports_handle_port_mod(struct datapath *dp, struct ofl_msg_port_mod *msg,
 static void
 dp_port_stats_update(struct sw_port *port) {
     port->stats->duration_sec  =  (time_msec() - port->created) / 1000;
-    port->stats->duration_nsec = ((time_msec() - port->created) % 1000) * 1000000;
-}
-
-void
-dp_port_live_update(struct sw_port *p) {
-
-  if((p->conf->state & OFPPS_LINK_DOWN)
-     || (p->conf->config & OFPPC_PORT_DOWN)) {
-      /* Port not live */
-      p->conf->state &= ~OFPPS_LIVE;
-  } else {
-      /* Port is live */
-      p->conf->state |= OFPPS_LIVE;
-  }
+    port->stats->duration_nsec = ((time_msec() - port->created) % 1000) * 1000;
 }
 
 ofl_err
@@ -798,7 +771,7 @@ dp_ports_handle_port_desc_request(struct datapath *dp,
 static void
 dp_ports_queue_update(struct sw_queue *queue) {
     queue->stats->duration_sec  =  (time_msec() - queue->created) / 1000;
-    queue->stats->duration_nsec = ((time_msec() - queue->created) % 1000) * 1000000;
+    queue->stats->duration_nsec = ((time_msec() - queue->created) % 1000) * 1000;
 }
 
 ofl_err
@@ -995,7 +968,7 @@ static int
 port_add_queue(struct sw_port *p, uint32_t queue_id,
                struct ofl_queue_prop_min_rate * mr)
 {
-    if (queue_id >= p->max_queues) {
+    if (queue_id > p->max_queues) {
         return EXFULL;
     }
 

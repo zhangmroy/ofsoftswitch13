@@ -245,7 +245,7 @@ ofl_oxm_type_print(FILE *stream, uint32_t type){
     case OXM_OF_UDP_SRC:            {fprintf(stream, "udp_src"); return; }
     case OXM_OF_UDP_DST:            {fprintf(stream, "udp_dst"); return; }
     case OXM_OF_SCTP_SRC:           {fprintf(stream, "sctp_src"); return; }
-    case OXM_OF_SCTP_DST:           {fprintf(stream, "sctp_dst"); return; }
+    case OXM_OF_SCTP_DST:           {fprintf(stream, "udp_dst"); return; }
     case OXM_OF_ICMPV4_CODE:        {fprintf(stream, "icmpv4_code"); return; }
     case OXM_OF_ICMPV4_TYPE:        {fprintf(stream, "icmpv4_type"); return; }
     case OXM_OF_ARP_OP:             {fprintf(stream, "arp_op"); return; }
@@ -347,7 +347,6 @@ ofl_error_type_print(FILE *stream, uint16_t type) {
         case (OFPET_METER_MOD_FAILED): {     fprintf(stream, "METER_MOD_FAILED"); return; }
         case (OFPET_QUEUE_OP_FAILED): {      fprintf(stream, "QUEUE_OP_FAILED"); return; }
         case (OFPET_SWITCH_CONFIG_FAILED): { fprintf(stream, "SWITCH_CONFIG_FAILED"); return; }
-        case (OFPET_TABLE_FEATURES_FAILED): { fprintf(stream, "TABLE_FEATURES_FAILED"); return; }
         default: {                           fprintf(stream, "?(%u)", type); return; }
     }
 }
@@ -503,17 +502,6 @@ ofl_error_code_print(FILE *stream, uint16_t type, uint16_t code) {
             switch (code) {
                 case (OFPSCFC_BAD_FLAGS) : { fprintf(stream, "BAD_FLAGS"); return; }
                 case (OFPSCFC_BAD_LEN) :   { fprintf(stream, "BAD_LEN"); return; }
-            }
-            break;
-        }
-        case (OFPET_TABLE_FEATURES_FAILED): {
-            switch (code) {
-                case (OFPTFFC_BAD_TABLE) : { fprintf(stream, "BAD_TABLE"); return; }
-                case (OFPTFFC_BAD_METADATA) :   { fprintf(stream, "BAD_METADATA"); return; }
-                case (OFPTFFC_BAD_TYPE) :   { fprintf(stream, "BAD_TYPE"); return; }
-                case (OFPTFFC_BAD_LEN) :   { fprintf(stream, "BAD_LEN"); return; }
-                case (OFPTFFC_BAD_ARGUMENT) :   { fprintf(stream, "BAD_ARGUMENT"); return; }
-                case (OFPTFFC_EPERM) :   { fprintf(stream, "EPERM"); return; }
             }
             break;
         }
